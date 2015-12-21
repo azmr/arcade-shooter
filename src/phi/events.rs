@@ -8,8 +8,8 @@ macro_rules! struct_events {
 
 
         pub struct ImmediateEvents {
-            $( $key_alias : Option<bool>, )*
-            $( $exit_alias : bool, )*
+            $( pub $key_alias : Option<bool>, )*
+            $( pub $exit_alias : bool, )*
         }
 
         impl ImmediateEvents {
@@ -58,6 +58,7 @@ macro_rules! struct_events {
                                     self.$key_alias = true;
                                 },
                             )*
+
                             _ => {}
                         },
 
