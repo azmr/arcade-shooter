@@ -1,0 +1,7 @@
+[package]
+name = "arcade_shooter"
+version = "0.1.0"
+authors = ["Andrew Reece <azmreece@gmail.com>"]
+
+[dependencies]
+sdl2 = "0.9"

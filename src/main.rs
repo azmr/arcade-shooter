@@ -1,9 +1,18 @@
 extern crate sdl2;
 
+#[macro_use]
 mod events;
 
 use ::sdl2::pixels::Color;
-use ::events::Events;
+
+struct_events! {
+    keyboard: {
+        key_escape: Escape,
+    },
+    else: {
+        quit: Quit { .. }
+    }
+}
 
 fn main() {
     // init SDL2
@@ -25,7 +34,7 @@ fn main() {
 
     loop {
         events.pump();
-        if events.quit || events.key_escape {
+        if events.now.quit || events.now.key_escape == Some(true) {
             break;
         }
 
