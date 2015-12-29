@@ -10,6 +10,7 @@ macro_rules! struct_events {
         pub struct ImmediateEvents {
             $( pub $key_alias : Option<bool>, )*
             $( pub $exit_alias : bool, )*
+            resize: Option<(u32, u32)>,
         }
 
         impl ImmediateEvents {
@@ -17,6 +18,7 @@ macro_rules! struct_events {
                 ImmediateEvents {
                     $( $key_alias : None, )*
                     $( $exit_alias : false, )*
+                    resize: None,
                 }
             }
         }
@@ -39,20 +41,27 @@ macro_rules! struct_events {
                 }
             }
 
-            pub fn pump(&mut self) {
+            pub fn pump(&mut self, renderer: &mut ::sdl2::render::Renderer) {
                 self.now = ImmediateEvents::new();
 
                 for event in self.pump.poll_iter() {
                     use ::sdl2::event::Event::*;
+                    use ::sdl2::event::WindowEventId::Resized;
                     use ::sdl2::keyboard::Keycode::*;
 
                     match event {
+                        Window { win_event_id: Resized, .. } => {
+                            self.now.resize = Some(renderer.output_size().unwrap());
+                        },
+
                         KeyDown { keycode, .. } => match keycode {
                             $(
                                 Some($key_sdl) => {
                                     if !self.$key_alias {
                                         // Key pressed, wasn't before
                                         self.now.$key_alias = Some(true);
+                                        
+                                        println!("Key down: {}", $key_sdl);
                                     }
 
                                     self.$key_alias = true;
