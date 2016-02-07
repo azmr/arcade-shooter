@@ -2,8 +2,7 @@ use ::phi::{Phi, View, ViewAction};
 use ::phi::data::Rectangle;
 use ::phi::gfx::{CopySprite, Sprite};
 use ::sdl2::pixels::Color;
-use ::sdl2::render::Renderer;
-use ::views::shared::Background;
+use ::views::shared::{Background, BgSet};
 
 // Constants
 const DEBUG: bool = false;
@@ -40,13 +39,11 @@ struct Ship {
 pub struct ShipView {
     player: Ship,
 
-    bg_back: Background,
-    bg_middle: Background,
-    bg_front: Background,
+    backgrounds: BgSet,
 }
 
 impl ShipView {
-    pub fn new(phi: &mut Phi) -> ShipView {
+    pub fn new(phi: &mut Phi, backgrounds: BgSet) -> ShipView {
         let spritesheet = Sprite::load(&mut phi.renderer, "assets/spaceship.png").unwrap();
 
         let mut sprites = Vec::with_capacity(9);
@@ -74,21 +71,7 @@ impl ShipView {
                 current: ShipFrame::MidNorm,
             },
             
-            bg_back: Background {
-                pos: 0.0,
-                vel: 20.0,
-                sprite: Sprite::load(&mut phi.renderer, "assets/starBG.png").unwrap(),
-            },
-            bg_middle: Background {
-                pos: 0.0,
-                vel: 40.0,
-                sprite: Sprite::load(&mut phi.renderer, "assets/starMG.png").unwrap(),
-            },
-            bg_front: Background {
-                pos: 0.0,
-                vel: 80.0,
-                sprite: Sprite::load(&mut phi.renderer, "assets/starFG.png").unwrap(),
-            },
+            backgrounds: backgrounds,
         }
     }
 }
@@ -96,9 +79,11 @@ impl ShipView {
 
 impl View for ShipView {
     fn render(&mut self, phi: &mut Phi, elapsed: f64) -> ViewAction {
-        // TODO: make escape in game view return to menu view
-        if phi.events.now.quit || phi.events.now.key_escape == Some(true) {
+        if phi.events.now.quit {
             return ViewAction::Quit;
+        }
+        if phi.events.now.key_escape == Some(true) {
+            return ViewAction::ChangeView(Box::new(::views::main_menu::MainMenuView::new(phi, self.backgrounds.clone())));
         }
 
         // Move player ship
@@ -155,8 +140,8 @@ impl View for ShipView {
         phi.renderer.clear();
 
         // Render backgrounds
-        self.bg_back.render(&mut phi.renderer, elapsed);
-        self.bg_middle.render(&mut phi.renderer, elapsed);
+        self.backgrounds.back.render(&mut phi.renderer, elapsed);
+        self.backgrounds.middle.render(&mut phi.renderer, elapsed);
 
         // Render ship bounding box for debugging
         if DEBUG{
@@ -170,7 +155,7 @@ impl View for ShipView {
             self.player.rect);
 
         // Render foreground
-        self.bg_front.render(&mut phi.renderer, elapsed);
+        self.backgrounds.front.render(&mut phi.renderer, elapsed);
 
         ViewAction::None
     }

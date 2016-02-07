@@ -40,3 +40,31 @@ impl Background {
     }
 }
 
+#[derive(Clone)]
+pub struct BgSet {
+    pub back: Background,
+    pub middle: Background,
+    pub front: Background,
+}
+
+impl BgSet {
+    pub fn new(renderer: &Renderer) -> BgSet {
+        BgSet {
+            back: Background {
+                pos: 0.0,
+                vel: 20.0,
+                sprite: Sprite::load(&renderer, "assets/starBG.png").unwrap(),
+            },
+            middle: Background {
+                pos: 0.0,
+                vel: 40.0,
+                sprite: Sprite::load(&renderer, "assets/starMG.png").unwrap(),
+            },
+            front: Background {
+                pos: 0.0,
+                vel: 80.0,
+                sprite: Sprite::load(&renderer, "assets/starFG.png").unwrap(),
+            },
+        }
+    }
+}

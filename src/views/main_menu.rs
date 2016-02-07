@@ -2,47 +2,31 @@ use ::phi::{Phi, View, ViewAction};
 use ::phi::data::Rectangle;
 use ::phi::gfx::{CopySprite, Sprite};
 use ::sdl2::pixels::Color;
-use ::views::shared::Background;
+use ::views::shared::{Background, BgSet};
 
 
 pub struct MainMenuView {
     actions: Vec<Action>,
     selected: i8,
 
-    bg_back: Background,
-    bg_middle: Background,
-    bg_front: Background,
+    backgrounds: BgSet,
 }
 // TODO: make background sync position with when view changes
 
 impl MainMenuView {
-    pub fn new(phi: &mut Phi) -> MainMenuView {
+    pub fn new(phi: &mut Phi, backgrounds: BgSet) -> MainMenuView {
         MainMenuView {
+            backgrounds: backgrounds.clone(),
+
             actions: vec![
-                Action::new(phi, "New Game", Box::new(|phi| {
-                    ViewAction::ChangeView(Box::new(::views::game::ShipView::new(phi)))
+                Action::new(phi, "New Game", Box::new(move |phi| {
+                    ViewAction::ChangeView(Box::new(::views::game::ShipView::new(phi, backgrounds.clone())))
                 })),
                 Action::new(phi, "Quit", Box::new(|_| {
                     ViewAction::Quit
                 })),
             ],
             selected: 0,
-
-            bg_back: Background {
-                pos: 0.0,
-                vel: 20.0,
-                sprite: Sprite::load(&mut phi.renderer, "assets/starBG.png").unwrap(),
-            },
-            bg_middle: Background {
-                pos: 0.0,
-                vel: 40.0,
-                sprite: Sprite::load(&mut phi.renderer, "assets/starMG.png").unwrap(),
-            }, 
-            bg_front: Background {
-                pos: 0.0,
-                vel: 80.0,
-                sprite: Sprite::load(&mut phi.renderer, "assets/starFG.png").unwrap(),
-            },
         }
     }
 }
@@ -53,9 +37,9 @@ impl View for MainMenuView {
             return ViewAction::Quit;
         }
 
-        // Spacebar executes selected option
-        // TODO: make Return also execute option
-        if phi.events.now.key_space == Some(true) {
+        // Spacebar or Return key executes selected option
+        if phi.events.now.key_space == Some(true) ||
+            phi.events.now.key_return == Some(true) {
             // "(phi)" at end prevents attempted invocation of a `func` method
             return (self.actions[self.selected as usize].func)(phi);
         }
@@ -82,9 +66,9 @@ impl View for MainMenuView {
         phi.renderer.clear();
 
         // Render backgrounds
-        self.bg_back.render(&mut phi.renderer, elapsed);
-        self.bg_middle.render(&mut phi.renderer, elapsed);
-        self.bg_front.render(&mut phi.renderer, elapsed);
+        self.backgrounds.back.render(&mut phi.renderer, elapsed);
+        self.backgrounds.middle.render(&mut phi.renderer, elapsed);
+        self.backgrounds.front.render(&mut phi.renderer, elapsed);
 
         let (win_w, win_h) = phi.output_size();
         let label_h = 50.0;
@@ -97,9 +81,9 @@ impl View for MainMenuView {
         phi.renderer.set_draw_color(Color::RGB(180, 180, 255));
         phi.renderer.fill_rect(Rectangle {
             w: box_w + (border_width * 2.0),
-            h: box_h + (border_width * 2.0),
+            h: box_h + (border_width * 2.0), // + (margin_h * 2)
             x: ((win_w - box_w) / 2.0) - border_width,
-            y: ((win_h - box_h) / 2.0) - border_width,
+            y: ((win_h - box_h) / 2.0) - border_width, // - margin_h
             }.to_sdl().unwrap());
 
         // Render menu box
@@ -114,35 +98,35 @@ impl View for MainMenuView {
         // Render labels in the menu
         let (win_w, win_h) = phi.output_size();
 
-        for (i, action) in self.actions.iter().enumerate() {
+        for (i, action) in self.actions.iter_mut().enumerate() {
             if self.selected as usize == i {
-                let (w, h) = action.focus_sprite.size();
-                phi.renderer.copy_sprite(&action.focus_sprite, Rectangle {
-                    x: (win_w - w) / 2.0,
-                    // Place each action under the previous one.
-                    y: ((win_h - box_h) + (label_h - h)) / 2.0 + label_h * i as f64,
-                    w: w,
-                    h: h,
-                });
+                action.focus(elapsed);
             }
             else {
-                let (w, h) = action.idle_sprite.size();
-                phi.renderer.copy_sprite(&action.idle_sprite, Rectangle {
-                    x: (win_w - w) / 2.0,
-                    // Place each action under the previous one.
-                    y: ((win_h - box_h) + (label_h - h)) / 2.0 + label_h * i as f64,
-                    w: w,
-                    h: h,
-                });
+                action.defocus(elapsed);
             }
+            action.sprite = phi.ttf_str_sprite(action.label,
+                "assets/belligerent.ttf", action.size as i32, action.color).unwrap();
+
+            let (w, h) = action.sprite.size();
+            phi.renderer.copy_sprite(&action.sprite, Rectangle {
+                x: (win_w - w) / 2.0,
+                // Place each action under the previous one.
+                y: ((win_h - box_h) + (label_h - h)) / 2.0 + label_h * i as f64,
+                w: w,
+                h: h,
+            });
         }
-        // TODO: make label size animate when (de)selected
 
 
         ViewAction::None
     }
 }
 
+const ACTION_IDLE_SIZE: i32 = 32;
+const ACTION_FOCUS_SIZE: i32 = 38;
+const ACTION_IDLE_COLOR: Color = Color::RGB(200, 200, 200);
+const ACTION_FOCUS_COLOR: Color = Color::RGB(255, 255, 255);
 
 struct Action {
     /// The function which should be executed if the action is chosen
@@ -150,24 +134,56 @@ struct Action {
     // with unsized data through a pointer.
     func: Box<Fn(&mut Phi) -> ViewAction>,
 
-    /// The sprite that is rendered when the label is not focussed on
-    idle_sprite: Sprite,
+    label: &'static str,
 
-    /// The sprite that is rendered when the label is focussed on
-    focus_sprite: Sprite,
+    sprite: Sprite,
+
+    size: f64,
+
+    color: Color,
 }
 
 impl Action {
     fn new(phi: &mut Phi, label: &'static str,
-           func: Box<Fn(&mut Phi) -> ViewAction>) -> Action {
+        func: Box<Fn(&mut Phi) -> ViewAction>) -> Action {
         Action {
             func: func,
-            idle_sprite: phi.ttf_str_sprite(label, "assets/belligerent.ttf",
-                                            32, Color::RGB(220, 220, 220))
-                .unwrap(),
-            focus_sprite: phi.ttf_str_sprite(label, "assets/belligerent.ttf",
-                                            38, Color::RGB(255, 255, 255))
-                .unwrap(),
+            label: label,
+            sprite: phi.ttf_str_sprite(label, "assets/belligerent.ttf",
+                                        ACTION_FOCUS_SIZE, ACTION_FOCUS_COLOR)
+                    .unwrap(),
+
+            size: ACTION_IDLE_SIZE as f64,
+
+            color: ACTION_IDLE_COLOR,
         }
     }
+
+    fn focus(&mut self, elapsed: f64) {
+        let speed = 40.0 * elapsed;
+        self.color = ACTION_FOCUS_COLOR;
+        self.size = linear_transition(self.size, ACTION_FOCUS_SIZE as f64, speed)
+    }
+    fn defocus(&mut self, elapsed: f64) {
+        let speed = 40.0 * elapsed;
+        self.color = ACTION_IDLE_COLOR;
+        self.size = linear_transition(self.size, ACTION_IDLE_SIZE as f64, speed)
+    }
+}
+
+fn linear_transition(current_state: f64, final_state: f64, speed: f64) -> f64 {
+    let mut new_state = current_state;
+    if new_state < final_state {
+        new_state += speed;
+        if new_state > final_state {
+            new_state = final_state;
+        }
+    }
+    else {
+        new_state -= speed;
+        if new_state < final_state {
+            new_state = final_state;
+        }
+    }
+    new_state
 }
