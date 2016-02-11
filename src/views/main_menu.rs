@@ -2,7 +2,7 @@ use ::phi::{Phi, View, ViewAction};
 use ::phi::data::Rectangle;
 use ::phi::gfx::{CopySprite, Sprite};
 use ::sdl2::pixels::Color;
-use ::views::shared::{Background, BgSet};
+use ::views::shared::BgSet;
 
 
 pub struct MainMenuView {
@@ -14,19 +14,23 @@ pub struct MainMenuView {
 // TODO: make background sync position with when view changes
 
 impl MainMenuView {
-    pub fn new(phi: &mut Phi, backgrounds: BgSet) -> MainMenuView {
+    pub fn new(phi: &mut Phi) -> MainMenuView {
+        let backgrounds = BgSet::new(&mut phi.renderer);
+        MainMenuView::with_backgrounds(phi, backgrounds)
+    }
+         
+    pub fn with_backgrounds(phi: &mut Phi, backgrounds: BgSet) -> MainMenuView {
         MainMenuView {
-            backgrounds: backgrounds.clone(),
-
             actions: vec![
-                Action::new(phi, "New Game", Box::new(move |phi| {
-                    ViewAction::ChangeView(Box::new(::views::game::ShipView::new(phi, backgrounds.clone())))
+                Action::new(phi, "New Game", Box::new(move |phi, backgrounds| {
+                    ViewAction::ChangeView(Box::new(::views::game::ShipView::with_backgrounds(phi, backgrounds)))
                 })),
-                Action::new(phi, "Quit", Box::new(|_| {
+                Action::new(phi, "Quit", Box::new(|_,_| {
                     ViewAction::Quit
                 })),
             ],
             selected: 0,
+            backgrounds: backgrounds,
         }
     }
 }
@@ -41,7 +45,7 @@ impl View for MainMenuView {
         if phi.events.now.key_space == Some(true) ||
             phi.events.now.key_return == Some(true) {
             // "(phi)" at end prevents attempted invocation of a `func` method
-            return (self.actions[self.selected as usize].func)(phi);
+            return (self.actions[self.selected as usize].func)(phi, self.backgrounds.clone());
         }
 
         // Up and Down keys change selection
@@ -132,7 +136,7 @@ struct Action {
     /// The function which should be executed if the action is chosen
     // Stored in a box because `Fn` is a trait that can only interact
     // with unsized data through a pointer.
-    func: Box<Fn(&mut Phi) -> ViewAction>,
+    func: Box<Fn(&mut Phi, BgSet) -> ViewAction>,
 
     label: &'static str,
 
@@ -145,7 +149,7 @@ struct Action {
 
 impl Action {
     fn new(phi: &mut Phi, label: &'static str,
-        func: Box<Fn(&mut Phi) -> ViewAction>) -> Action {
+        func: Box<Fn(&mut Phi, BgSet) -> ViewAction>) -> Action {
         Action {
             func: func,
             label: label,

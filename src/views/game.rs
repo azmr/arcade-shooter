@@ -43,9 +43,14 @@ pub struct ShipView {
 }
 
 impl ShipView {
-    pub fn new(phi: &mut Phi, backgrounds: BgSet) -> ShipView {
-        let spritesheet = Sprite::load(&mut phi.renderer, "assets/spaceship.png").unwrap();
+    pub fn new(phi: &mut Phi) -> ShipView {
+        let backgrounds = BgSet::new(&mut phi.renderer);
+        ShipView::with_backgrounds(phi, backgrounds)
+        }
 
+
+    pub fn with_backgrounds(phi: &mut Phi, backgrounds: BgSet) -> ShipView {
+        let spritesheet = Sprite::load(&mut phi.renderer, "assets/spaceship.png").unwrap();
         let mut sprites = Vec::with_capacity(9);
 
         for y in 0..3 {
@@ -83,7 +88,8 @@ impl View for ShipView {
             return ViewAction::Quit;
         }
         if phi.events.now.key_escape == Some(true) {
-            return ViewAction::ChangeView(Box::new(::views::main_menu::MainMenuView::new(phi, self.backgrounds.clone())));
+            return ViewAction::ChangeView(Box::new(
+                    ::views::main_menu::MainMenuView::with_backgrounds(phi, self.backgrounds.clone())));
         }
 
         // Move player ship
@@ -144,7 +150,7 @@ impl View for ShipView {
         self.backgrounds.middle.render(&mut phi.renderer, elapsed);
 
         // Render ship bounding box for debugging
-        if DEBUG{
+        if DEBUG {
             phi.renderer.set_draw_color(Color::RGB(200, 200, 50));
             phi.renderer.fill_rect(self.player.rect.to_sdl().unwrap());
         }
