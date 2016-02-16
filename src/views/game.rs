@@ -1,6 +1,6 @@
 use ::phi::{Phi, View, ViewAction};
 use ::phi::data::Rectangle;
-use ::phi::gfx::{CopySprite, Sprite};
+use ::phi::gfx::{AnimatedSprite, CopySprite, Sprite};
 use ::sdl2::pixels::Color;
 use ::views::shared::{Background, BgSet};
 
@@ -12,6 +12,12 @@ const PLAYER_SPEED: f64 = 180.0;
 
 const SHIP_W: f64 = 43.0;
 const SHIP_H: f64 = 39.0;
+
+const ASTEROID_PATH: &'static str = "assets/asteroid.png";
+const ASTEROIDS_W: usize = 21;
+const ASTEROIDS_H: usize = 7;
+const ASTEROIDS_TOTAL: usize = ASTEROIDS_W * ASTEROIDS_H - 4;
+const ASTEROID_SIDE: f64 = 96.0;
 
 /// The different states the ship might be in. In the image, they're ordered
 /// from left to right, then from top to bottom.
@@ -35,10 +41,89 @@ struct Ship {
     current: ShipFrame,
 }
 
+struct Asteroid {
+    sprite: AnimatedSprite,
+    rect: Rectangle,
+    vel: f64,
+}
+
+impl Asteroid {
+    fn new(phi: &mut Phi) -> Asteroid {
+        let mut asteroid =
+            Asteroid {
+                sprite: Asteroid::get_sprite(phi, 15.0),
+                rect: Rectangle {
+                    w: ASTEROID_SIDE,
+                    h: ASTEROID_SIDE,
+                    x: 128.0,
+                    y: 128.0,
+                },
+                vel: 0.0,
+            };
+
+        asteroid.reset(phi);
+        asteroid
+    }
+
+    fn reset(&mut self, phi: &mut Phi) {
+        let (w, h) = phi.output_size();
+
+        // set animation fps in [10.0, 30.0]
+        self.sprite.set_fps(::rand::random::<f64>().abs() * 20.0 + 10.0);
+
+        // rect.y in the screen vertically
+        self.rect = Rectangle {
+            w: ASTEROID_SIDE,
+            h: ASTEROID_SIDE,
+            x: w,
+            y: ::rand::random::<f64>().abs() * (h - ASTEROID_SIDE),
+        };
+
+        // set vel in [50.0, 150.0]
+        self.vel = ::rand::random::<f64>().abs() * 100.0 + 50.0;
+    }
+
+    fn get_sprite(phi: &mut Phi, fps: f64) -> AnimatedSprite {
+        let asteroid_spritesheet = Sprite::load(&mut phi.renderer, ASTEROID_PATH).unwrap();
+        let mut asteroid_sprites = Vec::with_capacity(ASTEROIDS_TOTAL);
+
+        for yth in 0..ASTEROIDS_H {
+            for xth in 0..ASTEROIDS_W {
+                if (ASTEROIDS_W * yth) + xth >= ASTEROIDS_TOTAL {
+                    break;
+                }
+
+                asteroid_sprites.push(
+                    asteroid_spritesheet.region(Rectangle {
+                        w: ASTEROID_SIDE,
+                        h: ASTEROID_SIDE,
+                        x: ASTEROID_SIDE * xth as f64,
+                        y: ASTEROID_SIDE * yth as f64,
+                    }).unwrap());
+            }
+        }
+
+        AnimatedSprite::with_fps(asteroid_sprites, fps)
+    }
+    
+    fn update(&mut self, phi: &mut Phi, dt: f64) {
+        self.rect.x -= dt * self.vel;
+        self.sprite.add_time(dt);
+
+        if self.rect.x <= -ASTEROID_SIDE {
+            self.reset(phi);
+        }
+    }
+
+    fn render(&mut self, phi: &mut Phi) {
+        phi.renderer.copy_sprite(&self.sprite, self.rect);
+    }
+}
+
 // View Definition
 pub struct ShipView {
     player: Ship,
-
+    asteroid: Asteroid,
     backgrounds: BgSet,
 }
 
@@ -75,6 +160,8 @@ impl ShipView {
                 sprites: sprites,
                 current: ShipFrame::MidNorm,
             },
+
+            asteroid: Asteroid::new(phi),
             
             backgrounds: backgrounds,
         }
@@ -139,6 +226,9 @@ impl View for ShipView {
             else if dx > 0.0 && dy > 0.0    { ShipFrame::DownFast }
             else if dx < 0.0 && dy > 0.0    { ShipFrame::DownSlow }
             else { unreachable!() };
+
+        // Update the asteroid
+        self.asteroid.update(phi, elapsed);
             
 
         // Clear screen
@@ -159,6 +249,8 @@ impl View for ShipView {
         phi.renderer.copy_sprite(
             &self.player.sprites[self.player.current as usize],
             self.player.rect);
+
+        self.asteroid.render(phi);
 
         // Render foreground
         self.backgrounds.front.render(&mut phi.renderer, elapsed);

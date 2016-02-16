@@ -11,6 +11,11 @@ pub struct Sprite {
     src: Rectangle,
 }
 
+/// Common interface for rendering graphical components to a given window region
+pub trait Renderable {
+    fn render(&self, renderer: &mut Renderer, dest: Rectangle);
+}
+
 impl Sprite {
     /// Creates a new sprite by wrapping a `Texture`.
     pub fn new(texture: Texture) -> Sprite {
@@ -59,17 +64,99 @@ impl Sprite {
     pub fn size(&self) -> (f64, f64) {
         (self.src.w, self.src.h)
     }
-    pub fn render(&self, renderer: &mut Renderer, dest: Rectangle) {
+}
+
+impl Renderable for Sprite {
+    fn render(&self, renderer: &mut Renderer, dest: Rectangle) {
         renderer.copy(&mut self.tex.borrow_mut(), self.src.to_sdl(), dest.to_sdl())
     }
 }
 
-pub trait CopySprite {
-    fn copy_sprite(&mut self, sprite: &Sprite, dest: Rectangle);
+pub trait CopySprite<T> {
+    fn copy_sprite(&mut self, sprite: &T, dest: Rectangle);
 }
 
-impl<'window> CopySprite for Renderer<'window> {
-    fn copy_sprite(&mut self, sprite: &Sprite, dest: Rectangle) {
+impl<'window, T:Renderable> CopySprite<T> for Renderer<'window> {
+    fn copy_sprite(&mut self, sprite: &T, dest: Rectangle) {
         sprite.render(self, dest);
+    }
+}
+
+#[derive(Clone)]
+pub struct AnimatedSprite {
+    /// The frames that will be rendered, in order.
+    sprites: Vec<Sprite>,
+
+    /// The time between frames, in seconds
+    frame_delay: f64,
+
+    /// The total alive time of the sprite, used to derive the current sprite
+    current_time: f64,
+}
+
+impl AnimatedSprite {
+    /// Creates a new animated sprite init to time 0
+    pub fn new(sprites: Vec<Sprite>, frame_delay: f64) -> AnimatedSprite {
+        AnimatedSprite {
+            sprites: Rc::new(sprites),
+            frame_delay: frame_delay,
+            current_time: 0.0,
+        }
+    }
+
+    /// Creates a new animated sprite that changes frame `fps` times per second
+    pub fn with_fps(sprites: Vec<Sprite>, fps: f64) -> AnimatedSprite {
+        // TODO: stop animating when 0fps
+        if fps == 0.0 {
+            panic!("Passed 0 to AnimatedSprite::with_fps");
+        }
+
+        let frame_delay = 1.0 / fps;
+        AnimatedSprite::new(sprites, frame_delay)
+    }
+
+
+    // The number of frames in the animation
+    pub fn frames(&self) -> usize {
+        self.sprites.len()
+    }
+
+    /// Set the time between frames in seconds.
+    /// Negative values animate in reverse.
+    pub fn set_frame_delay(&mut self, frame_delay: f64) {
+        self.frame_delay = frame_delay;
+    }
+
+    /// Set the number of frames per second for the animation.
+    /// Negative values animate in reverse.
+    pub fn set_fps(&mut self, fps: f64) {
+        if fps == 0.0 {
+            panic!("Passed 0 to AnimatedSprite::set_fps");
+        }
+
+        let frame_delay = 1.0 / fps;
+        self.set_frame_delay(frame_delay);
+    }
+
+    /// Add time (in seconds) to `current_time` of animated sprite.
+    /// Provides timing for next frame.
+    pub fn add_time(&mut self, dt: f64) {
+        self.current_time += dt;
+
+        // Go back in time >> select last frame
+        if self.current_time < 0.0 {
+            self.current_time = (self.frames() - 1) as f64 * self.frame_delay;
+        }
+    }
+}
+
+impl Renderable for AnimatedSprite {
+    /// Renders current frame
+    fn render(&self, renderer: &mut Renderer, dest: Rectangle) {
+        let current_frame =
+            (self.current_time / self.frame_delay) as usize % self.frames();
+
+        let sprite = &self.sprites[current_frame];
+        sprite.render(renderer, dest);
     }
 }
